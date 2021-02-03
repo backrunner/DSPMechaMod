@@ -10,9 +10,10 @@ using System.Reflection;
 
 namespace DSPMechaMod
 {
-  [BepInPlugin("top.backrunner.DSP.MechaMod", "DSP Mecha Mod", "1.3")]
+  [BepInPlugin("top.backrunner.DSP.MechaMod", "DSP Mecha Mod", "1.4")]
   public class MechaMod: BaseUnityPlugin
   {
+    public static ConfigEntry<bool> autoSortConfig;
     bool enableInifiniteEnergy = false;
     bool inited = false;
     float initialConfigWarpSpeed, initialConfigSailSpeed;
@@ -32,7 +33,9 @@ namespace DSPMechaMod
       replicateSpeedAmount = Config.Bind("Options", "Replicate speed amount per tweaking", 1f, "每次调整生产速度的量");
       modifySailSpeed = Config.Bind("Switches", "Enable modify max sail speed", false, "是否调整最大航行速度");
       modifyWarpSpeed = Config.Bind("Switches", "Enable modify max warp speed", false, "是否调整最大曲速航行速度");
+      autoSortConfig = Config.Bind("Switches", "Enable auto sort when open up inventory", true, "是否在打开物品面板时自动排序");
       Harmony.CreateAndPatchAll(typeof(MechaMod));
+      Harmony.CreateAndPatchAll(typeof(AutoSortPatch));
     }
     void Update()
     {
@@ -147,6 +150,10 @@ namespace DSPMechaMod
         if (Input.GetKeyDown(downReplicateSpeedHotKey.Value))
         {
           mecha.replicateSpeed -= replicateSpeedAmount.Value;
+          if (mecha.replicateSpeed < 1)
+          {
+            mecha.replicateSpeed = 1;
+          }
           float currentReplicateSpeed = GameMain.data.mainPlayer.mecha.replicateSpeed;
           UIRealtimeTip.Popup("机甲建造速度已调整为" + currentReplicateSpeed.ToString());
         }
@@ -176,6 +183,18 @@ namespace DSPMechaMod
         {
           yield return code;
         }
+      }
+    }
+  }
+
+  [HarmonyPatch(typeof(UIGame), "OpenPlayerInventory")]
+  public class AutoSortPatch
+  {
+    public static void Prefix()
+    {
+      if (MechaMod.autoSortConfig.Value)
+      {
+        GameMain.data?.mainPlayer?.package?.Sort();
       }
     }
   }
