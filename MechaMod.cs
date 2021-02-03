@@ -18,8 +18,8 @@ namespace DSPMechaMod
     bool inited = false;
     float initialConfigWarpSpeed, initialConfigSailSpeed;
     ConfigEntry<KeyCode> addEnergyOneTimeHotKey, infiniteEnergyHotKey, addWarpHotKey, upReplicateSpeedHotKey, downReplicateSpeedHotKey;
-    ConfigEntry<int> warpAmount;
-    ConfigEntry<bool> modifySailSpeed, modifyWarpSpeed, enableCheating;
+    ConfigEntry<int> warpAmount, storageSizeConfig, originalStorageSizeConfig;
+    ConfigEntry<bool> modifySailSpeed, modifyWarpSpeed, enableCheating, enableStorageSizeMod;
     ConfigEntry<float> replicateSpeedAmount, maxSailSpeed, maxWarpSpeed;
     ConfigEntry<float> originalSailSpeedConfig, originalWarpSpeedConfig;
     void Start()
@@ -31,10 +31,12 @@ namespace DSPMechaMod
       downReplicateSpeedHotKey = Config.Bind("HotKey", "Speed down replicate", KeyCode.F3, "减慢机甲建造");
       upReplicateSpeedHotKey = Config.Bind("HotKey", "Speed up replicate", KeyCode.F4, "加速机甲建造");
       replicateSpeedAmount = Config.Bind("Options", "Replicate speed amount per tweaking", 1f, "每次调整生产速度的量");
-      enableCheating = Config.Bind("Switches", "Enable cheating", false, "是否启用作弊选项（能源、翘曲器、建造速度）");
+      enableCheating = Config.Bind("Switches", "Enable cheating about energy and replicate", false, "是否启用作弊选项（能源、翘曲器、建造速度）");
       modifySailSpeed = Config.Bind("Switches", "Enable modify max sail speed", false, "是否调整最大航行速度");
       modifyWarpSpeed = Config.Bind("Switches", "Enable modify max warp speed", false, "是否调整最大曲速航行速度");
       autoSortConfig = Config.Bind("Switches", "Enable auto sort when open up inventory", true, "是否在打开物品面板时自动排序");
+      enableStorageSizeMod = Config.Bind("Switches", "Enable storage size modification", false, "是否修改机体仓储容量");
+      storageSizeConfig = Config.Bind("Options", "Storage size", 150, "机体仓储容量（上限200，从大改小会造成存在后面的物品丢失）");
       Harmony.CreateAndPatchAll(typeof(MechaMod));
       Harmony.CreateAndPatchAll(typeof(AutoSortPatch));
     }
@@ -43,6 +45,7 @@ namespace DSPMechaMod
       try
       {
         Mecha mecha = GameMain.data?.mainPlayer?.mecha;
+        StorageComponent storage = GameMain.data.mainPlayer.package;
         if (mecha == null)
         {
           return;
@@ -51,10 +54,12 @@ namespace DSPMechaMod
         {
           float originalSailSpeed = mecha.maxSailSpeed;
           float originalWarpSpeed = mecha.maxWarpSpeed;
+          int originalStorageSize = storage.size;
           maxSailSpeed = Config.Bind("Options", "Max sail speed", (float)originalSailSpeed, "最大航行速度");
           maxWarpSpeed = Config.Bind("Options", "Max warp speed", (float)originalWarpSpeed, "最大曲速航行速度");
-          originalSailSpeedConfig = Config.Bind("Private", "Original sail speed", originalSailSpeed);
-          originalWarpSpeedConfig = Config.Bind("Private", "Original warp speed", originalWarpSpeed);
+          originalSailSpeedConfig = Config.Bind("Private", "Original sail speed", originalSailSpeed, "Mod私有属性，请勿修改 - 原始航速");
+          originalWarpSpeedConfig = Config.Bind("Private", "Original warp speed", originalWarpSpeed, "Mod私有属性，请勿修改 - 原始曲速航速");
+          originalStorageSizeConfig = Config.Bind("Private", "Original store size", originalStorageSize, "Mod私有属性，请勿修改 - 原始存储大小");
           initialConfigSailSpeed = maxSailSpeed.Value;
           initialConfigWarpSpeed = maxWarpSpeed.Value;
           Config.Save();
@@ -74,6 +79,11 @@ namespace DSPMechaMod
           {
             mecha.maxWarpSpeed = originalWarpSpeedConfig.Value;
           }
+          if (enableStorageSizeMod.Value)
+          {
+            int size = storageSizeConfig.Value > 200 ? 200 : storageSizeConfig.Value;
+            storage.SetSize(size);
+          }
           inited = true;
         }
         if (modifySailSpeed.Value)
@@ -88,6 +98,7 @@ namespace DSPMechaMod
           }
           if (mecha.maxSailSpeed != maxSailSpeed.Value && mecha.maxSailSpeed != originalSailSpeedConfig.Value)
           {
+            maxSailSpeed.Value = mecha.maxSailSpeed;
             originalSailSpeedConfig.Value += mecha.maxSailSpeed - maxSailSpeed.Value;
             Config.Save();
           }
@@ -108,12 +119,30 @@ namespace DSPMechaMod
           }
           if (mecha.maxWarpSpeed != maxWarpSpeed.Value && mecha.maxWarpSpeed != originalWarpSpeedConfig.Value)
           {
+            maxWarpSpeed.Value = mecha.maxWarpSpeed;
             originalWarpSpeedConfig.Value += mecha.maxWarpSpeed - maxWarpSpeed.Value;
             Config.Save();
           }
         } else
         {
           mecha.maxWarpSpeed = originalWarpSpeedConfig.Value;
+        }
+        if (enableStorageSizeMod.Value)
+        {
+          if (storage.size != storageSizeConfig.Value)
+          {
+            int size = storageSizeConfig.Value > 200 ? 200 : storageSizeConfig.Value;
+            storage.SetSize(size);
+          }
+          if (storage.size != storageSizeConfig.Value && storage.size != originalStorageSizeConfig.Value)
+          {
+            storageSizeConfig.Value = storage.size;
+            originalStorageSizeConfig.Value += storage.size - storageSizeConfig.Value;
+            Config.Save();
+          }
+        } else
+        {
+          storage.SetSize(originalStorageSizeConfig.Value);
         }
         // input event
         if (enableCheating.Value)
