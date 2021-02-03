@@ -2,10 +2,15 @@
 using BepInEx;
 using BepInEx.Configuration;
 using System;
+using HarmonyLib;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection.Emit;
+using System.Reflection;
 
 namespace DSPMechaMod
 {
-  [BepInPlugin("top.backrunner.DSP.MechaMod", "DSP Mecha Mod", "1.2")]
+  [BepInPlugin("top.backrunner.DSP.MechaMod", "DSP Mecha Mod", "1.3")]
   public class MechaMod: BaseUnityPlugin
   {
     bool enableInifiniteEnergy = false;
@@ -27,6 +32,7 @@ namespace DSPMechaMod
       replicateSpeedAmount = Config.Bind("Options", "Replicate speed amount per tweaking", 1f, "每次调整生产速度的量");
       modifySailSpeed = Config.Bind("Switches", "Enable modify max sail speed", false, "是否调整最大航行速度");
       modifyWarpSpeed = Config.Bind("Switches", "Enable modify max warp speed", false, "是否调整最大曲速航行速度");
+      Harmony.CreateAndPatchAll(typeof(MechaMod));
     }
     void Update()
     {
@@ -68,12 +74,15 @@ namespace DSPMechaMod
         }
         if (modifySailSpeed.Value)
         {
+          if (mecha.maxSailSpeed != maxSailSpeed.Value) {
+            mecha.maxSailSpeed = maxSailSpeed.Value;
+          }
           if (maxSailSpeed.Value != initialConfigSailSpeed)
           {
             initialConfigSailSpeed = maxSailSpeed.Value;
             mecha.maxSailSpeed = maxSailSpeed.Value;
           }
-          if (mecha.maxSailSpeed != maxSailSpeed.Value)
+          if (mecha.maxSailSpeed != maxSailSpeed.Value && mecha.maxSailSpeed != originalSailSpeedConfig.Value)
           {
             originalSailSpeedConfig.Value += mecha.maxSailSpeed - maxSailSpeed.Value;
             Config.Save();
@@ -84,12 +93,16 @@ namespace DSPMechaMod
         }
         if (modifyWarpSpeed.Value)
         {
+          if (mecha.maxWarpSpeed != maxWarpSpeed.Value)
+          {
+            mecha.maxWarpSpeed = maxWarpSpeed.Value;
+          }
           if (maxWarpSpeed.Value != initialConfigWarpSpeed)
           {
             initialConfigWarpSpeed = maxWarpSpeed.Value;
             mecha.maxWarpSpeed = maxWarpSpeed.Value;
           }
-          if (mecha.maxWarpSpeed != maxWarpSpeed.Value)
+          if (mecha.maxWarpSpeed != maxWarpSpeed.Value && mecha.maxWarpSpeed != originalWarpSpeedConfig.Value)
           {
             originalWarpSpeedConfig.Value += mecha.maxWarpSpeed - maxWarpSpeed.Value;
             Config.Save();
@@ -137,8 +150,32 @@ namespace DSPMechaMod
           float currentReplicateSpeed = GameMain.data.mainPlayer.mecha.replicateSpeed;
           UIRealtimeTip.Popup("机甲建造速度已调整为" + currentReplicateSpeed.ToString());
         }
-      } catch (NullReferenceException e) { 
+      } catch (NullReferenceException)
+      { 
         // do noting
+      }
+    }
+
+    public static double getMechaMaxSailSpeed()
+    {
+      return GameMain.data.mainPlayer.mecha.maxSailSpeed;
+    }
+
+    [HarmonyTranspiler, HarmonyPatch(typeof(UISailPanel), "_OnUpdate")]
+    public static IEnumerable<CodeInstruction> SailPanelPath(IEnumerable<CodeInstruction> instructions)
+    {
+      MethodInfo getSpeedMethod = AccessTools.Method(typeof(MechaMod), nameof(getMechaMaxSailSpeed));
+      Mecha mecha = GameMain.data?.mainPlayer?.mecha;
+      List<CodeInstruction> codes = instructions.ToList();
+      foreach (CodeInstruction code in codes)
+      {
+        if (code.opcode == OpCodes.Ldc_R8 && (double)code.operand == 2000)
+        {
+          yield return new CodeInstruction(OpCodes.Call, getSpeedMethod);
+        } else
+        {
+          yield return code;
+        }
       }
     }
   }
