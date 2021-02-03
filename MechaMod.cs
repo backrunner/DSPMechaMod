@@ -129,7 +129,7 @@ namespace DSPMechaMod
         }
         if (enableStorageSizeMod.Value)
         {
-          if (storage.size != storageSizeConfig.Value)
+          if (storage.size != storageSizeConfig.Value && storageSizeConfig.Value > originalStorageSizeConfig.Value)
           {
             int size = storageSizeConfig.Value > 200 ? 200 : storageSizeConfig.Value;
             storage.SetSize(size);
